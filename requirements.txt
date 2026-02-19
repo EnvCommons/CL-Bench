@@ -1,0 +1,17 @@
+# OpenReward SDK
+openreward
+
+# OpenAI for grading
+openai
+
+# Data handling
+datasets
+pandas
+pyarrow
+
+# Validation
+pydantic
+
+# Server
+fastapi
+uvicorn

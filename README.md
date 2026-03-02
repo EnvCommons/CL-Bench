@@ -1,290 +1,83 @@
-# CLBench - Context Learning Benchmark
+# CL-Bench
 
-OpenReward environment for evaluating agent ability to learn from novel context and apply knowledge to questions.
+[![⭐ OpenReward Environment](https://img.shields.io/badge/%E2%AD%90%20OpenReward-Environment-f7e6cc)](https://openreward.ai/GeneralReasoning/CL-Bench)
+[![Hugging Face Dataset](https://img.shields.io/badge/Hugging%20Face-Dataset-orange)](https://huggingface.co/datasets/tencent/CL-bench)
 
-## Overview
+## Description
 
-CL-Bench (Context Learning Benchmark) tests whether language models can acquire and apply novel information presented within the prompt, rather than relying on pre-trained knowledge.
+CL-Bench (Context Learning Benchmark) is an environment for evaluating the ability of language models to learn from novel context provided at inference time and apply that knowledge to answer questions. The benchmark contains 500 complex contexts, 1,899 tasks, and 31,607 verification rubrics crafted by domain experts. Tasks span four categories: domain knowledge reasoning, novel rule systems, procedural task following, and empirical discovery.
 
-- **Dataset**: 1,899 tasks from 500 unique contexts
-- **Source**: HuggingFace [`tencent/CL-bench`](https://huggingface.co/datasets/tencent/CL-bench)
-- **Evaluation**: Binary scoring (1.0 if ALL rubrics pass, else 0.0)
-- **Grader**: GPT-5-mini with structured rubric evaluation
-- **Difficulty**: Challenging benchmark (frontier models achieve 17-24% success rate)
+## Capabilities
 
-## Task Categories
+- Context learning from novel information presented at inference time
+- Applying newly acquired knowledge to answer domain-specific questions
+- Multi-rubric evaluation against expert-crafted verification criteria
+- Domain-specific reasoning across four distinct task categories
 
-Tasks evaluate four primary dimensions:
+## Compute Requirements
 
-1. **Domain Knowledge Reasoning** - Applying subject-specific expertise
-2. **Novel Rule Systems** - Following explicitly defined rules
-3. **Procedural Task Following** - Executing multi-step procedures
-4. **Empirical Discovery** - Pattern recognition and simulation
+No sandbox is needed. CL-Bench uses standard defaults.
 
-## Task Format
+## License
 
-Each task provides:
-1. **System context**: Novel information, rules, or domain knowledge
-2. **User question**: Task to complete using the context
-3. **Evaluation rubrics**: 3-114 criteria (hidden from agent, used for grading)
+[ORLv1](https://openreward.ai/orlv1.md).
 
-## Scoring System
+## Tasks
 
-- **Reward = 1.0**: ALL rubrics pass ✅
-- **Reward = 0.0**: ANY rubric fails ❌
-- **Grading**: LM-as-judge using GPT-5-mini
-- **Feedback**: Detailed per-rubric pass/fail with reasoning
+There are 1,899 tasks in a single "test" split, drawn from 500 unique contexts sourced from the [tencent/CL-bench](https://huggingface.co/datasets/tencent/CL-bench) dataset. Each task provides a system context containing novel information, rules, or domain knowledge, followed by a question that the agent must answer using the provided context. Tasks are evaluated against 3 to 114 rubrics per task (averaging approximately 16.6), for a total of 31,607 rubrics across the benchmark.
 
-This strict evaluation ensures thorough understanding and application of context.
+The four task categories are:
 
-## Local Development
+1. **Domain Knowledge Reasoning** -- Applying subject-specific expertise presented in the context.
+2. **Novel Rule Systems** -- Following explicitly defined rules provided in the context.
+3. **Procedural Task Following** -- Executing multi-step procedures described in the context.
+4. **Empirical Discovery** -- Pattern recognition and simulation based on contextual data.
 
-### 1. Install Dependencies
+## Reward Structure
 
-```bash
-pip install -r requirements.txt
-```
+CL-Bench uses binary reward scoring (1.0 or 0.0). All rubrics for a given task must pass for the agent to receive a reward of 1.0. If any single rubric fails, the reward is 0.0. Each rubric is graded independently by gpt-5-mini using structured JSON output, and detailed per-rubric pass/fail feedback with reasoning is returned to the caller.
 
-### 2. Download Dataset
+## Data
 
-```bash
-python download_data.py
-```
+Task data is stored in `clbench_tasks.parquet`, sourced from the HuggingFace dataset [tencent/CL-bench](https://huggingface.co/datasets/tencent/CL-bench). In production, data is stored on the OpenReward platform at `/orwd_data/clbench/`.
 
-This will:
-- Download 1,899 tasks from HuggingFace
-- Convert to parquet format
-- Save as `clbench_tasks.parquet`
-- Display file size and next steps
+## Tools
 
-### 3. Run Server
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `submit_answer` | `answer: str` | Submit your final answer for evaluation against all rubrics. Ends the episode. |
 
-```bash
-export OPENAI_API_KEY="sk-..."  # Required for grader
-python server.py
-```
+## Time Horizon
 
-Server will start on `http://0.0.0.0:8000`
+CL-Bench is a single-turn environment. The agent reads the context and question, then submits one answer via the `submit_answer` tool.
 
-### 4. Test with Agent
+## Environment Difficulty
 
-```bash
-# Test with OpenAI agent
-export OPENAI_API_KEY="sk-..."
-python test_agent.py
+CL-Bench is a high-difficulty benchmark. Frontier models achieve a 17-24% success rate, reflecting the strict ALL-rubrics-must-pass evaluation criterion and the complexity of the context learning tasks.
 
-# Optional: specify model and task
-export MODEL_NAME="gpt-5.2"
-export TASK_INDEX="5"
-python test_agent.py
-```
+## Other Environment Requirements
 
-### 5. Test Grader Directly
+CL-Bench requires an `openai_api_key` secret for gpt-5-mini rubric evaluation. Pass this via the session secrets:
 
-```bash
-export OPENAI_API_KEY="sk-..."
-python test_grader.py
-```
-
-This allows you to test the grader evaluation without running a full agent.
-
-## Docker
-
-### Build
-
-```bash
-docker build -t clbench:latest .
-```
-
-### Run (Local Testing)
-
-```bash
-docker run -p 8080:8000 \
-  -e OPENAI_API_KEY="sk-..." \
-  -v $(pwd)/clbench_tasks.parquet:/app/clbench_tasks.parquet \
-  clbench:latest
-```
-
-Note: Mount local data file for testing. In production, data comes from `/orwd_data/clbench/`.
-
-## Deployment
-
-### Prerequisites
-1. Create namespace `EnvCommons/clbench` on https://openreward.ai
-2. Upload data to cloud storage (see [DATA_UPLOAD.md](DATA_UPLOAD.md))
-
-### GitHub Setup
-
-```bash
-# Source GitHub token
-source /home/ross/Documents/or_envs/newenvs/.env
-
-# Create repository
-gh repo create EnvCommons/clbench --public --source=. --remote=origin
-
-# Push code
-git add -A
-git commit -m "Initial CLBench environment implementation"
-git push -u origin main
-```
-
-### OpenReward Configuration
-1. Go to https://openreward.ai/environments/new
-2. Connect GitHub repository: `EnvCommons/clbench`
-3. Set namespace: `EnvCommons/clbench`
-4. Configure deployment settings
-5. Verify data is uploaded to `/orwd_data/clbench/`
-
-### Verify Deployment
-Check logs for:
-```
-[CLBench] Loaded 1899 tasks from /orwd_data/clbench/clbench_tasks.parquet
-[CLBench] Prepared 1899 task specifications
-```
-
-## Environment Details
-
-### Namespace
-- **Production**: `EnvCommons/clbench`
-- **Local**: `local/CLBench`
-
-### Splits
-- **test**: All 1,899 evaluation tasks
-
-### Tools
-
-#### `submit_answer(answer: str)`
-Submit final answer for evaluation.
-
-**Parameters**:
-- `answer` (string): Your complete answer to the question
-
-**Returns**:
-- Display text with overall result and per-rubric feedback
-- Reward: 1.0 if all rubrics pass, 0.0 otherwise
-- Finished: `true` (single submission per task)
-
-**Metadata**:
-- `task_id`: Task identifier
-- `rubrics_passed`: Number of rubrics that passed
-- `rubrics_total`: Total number of rubrics
-- `all_passed`: Boolean indicating if ALL rubrics passed
-- `rubric_results`: Detailed per-rubric evaluation
-- `reference_answer`: Reference solution (for analysis)
-
-### Secrets Required
-- `openai_api_key`: Required for GPT-5-mini grader
-
-Pass via session:
 ```python
-async with environment.session(task=task, secrets={"openai_api_key": "sk-..."}) as session:
+async with environment.session(
+    task=task,
+    secrets={"openai_api_key": "sk-..."}
+) as session:
     ...
 ```
 
-## File Structure
+## Safety
 
+CL-Bench does not present safety concerns. The agent processes text contexts and submits text answers. There is no file system access, no network interaction, and no sandbox execution.
+
+## Citations
+
+```bibtex
+@article{an2025clbench,
+  title={CL-bench: A Benchmark for Context Learning},
+  author={An, Deliang and Wang, Ningxuan and Yang, Xiaotong and Dong, Liang and Liu, Yuhong},
+  journal={arXiv preprint arXiv:2602.03587},
+  year={2025}
+}
 ```
-clbench/
-├── server.py              # Main environment + server
-├── download_data.py       # Data preparation script
-├── test_agent.py          # OpenAI test client
-├── test_grader.py         # Direct grader testing
-├── requirements.txt       # Python dependencies
-├── Dockerfile            # Container configuration
-├── DATA_UPLOAD.md        # Upload instructions
-├── README.md             # This file
-└── .gitignore           # Exclude data files
-```
-
-## Example Usage
-
-### Python Client
-
-```python
-import asyncio
-from openai import AsyncOpenAI
-from openreward import AsyncOpenReward
-
-async def main():
-    or_client = AsyncOpenReward()
-    oai_client = AsyncOpenAI(api_key="sk-...")
-
-    # Connect to environment
-    environment = or_client.environments.get(
-        name="EnvCommons/clbench"
-    )
-
-    # Get task
-    tasks = await environment.list_tasks(split="test")
-    tools = await environment.list_tools(format="openai")
-
-    # Run session
-    async with environment.session(
-        task=tasks[0],
-        secrets={"openai_api_key": "sk-..."}
-    ) as session:
-        prompt = await session.get_prompt()
-
-        # ... your agent logic ...
-
-        result = await session.call_tool(
-            "submit_answer",
-            {"answer": "My answer based on the context"}
-        )
-
-        print(f"Reward: {result.reward}")
-
-asyncio.run(main())
-```
-
-## Dataset Information
-
-### Source
-- **HuggingFace**: `tencent/CL-bench`
-- **Split**: "train" (contains evaluation tasks despite name)
-- **Paper**: [CL-Bench: Evaluating Context Learning](https://arxiv.org/abs/...)
-
-### Statistics
-- **Total tasks**: 1,899
-- **Contexts**: 500 unique contexts
-- **Rubrics per task**: 3-114 (average ~16)
-- **Total rubrics**: 31,607
-
-### License
-See dataset page on HuggingFace for license information.
-
-## Troubleshooting
-
-### FileNotFoundError
-**Error**: `FileNotFoundError: clbench_tasks.parquet`
-
-**Solution**: Run `python download_data.py` to download the dataset.
-
-### Grading Failures
-**Error**: "Grading failed due to error"
-
-**Solutions**:
-- Verify `OPENAI_API_KEY` is set and valid
-- Check API rate limits
-- Ensure internet connectivity (unless using local proxy)
-
-### Wrong Reward
-**Issue**: Expecting 1.0 but got 0.0
-
-**Explanation**: ALL rubrics must pass for reward=1.0. Check the detailed feedback to see which rubrics failed.
-
-## Performance Notes
-
-- **Grading time**: 5-15 seconds per submission (depends on rubric count)
-- **API costs**: ~$0.01-0.05 per task (GPT-5-mini pricing)
-- **Difficulty**: High - frontier models achieve 17-24% success rate
-
-## Contributing
-
-For issues or improvements, please open an issue on the GitHub repository.
-
-## References
-
-- [OpenReward Platform](https://openreward.ai)
-- [CL-Bench Dataset](https://huggingface.co/datasets/tencent/CL-bench)
-- [OpenReward Documentation](https://docs.openreward.ai)

@@ -52,12 +52,19 @@ CL-Bench is a single-turn environment. The agent reads the context and question,
 
 ## Environment Difficulty
 
-The original paper evaluates ten frontier language models on CL-Bench:
+The [CL-Bench leaderboard](https://www.clbench.com) evaluates frontier language models:
 
 | Model | Success Rate |
 |-------|--------------|
-| GPT-5.1 | 23.7% |
-| Average (10 models) | 17.2% |
+| GPT 5.1 (High) | 23.7% |
+| GPT 5.1 | 21.1% |
+| Claude Opus 4.5 Thinking | 21.1% |
+| Claude Opus 4.5 | 19.1% |
+| Kimi K2.5 | 19.4% |
+| GPT 5.2 | 18.2% |
+| o3 (High) | 17.8% |
+| Gemini 3 Pro | 14.8% |
+| DeepSeek V3.2 | 12.4% |
 
 The strict all-rubrics-must-pass criterion and complexity of context learning tasks make this a challenging benchmark.
 

@@ -1,7 +1,6 @@
 # CL-Bench
 
-[![⭐ OpenReward Environment](https://img.shields.io/badge/%E2%AD%90%20OpenReward-Environment-f7e6cc)](https://openreward.ai/GeneralReasoning/CL-Bench)
-[![Hugging Face Dataset](https://img.shields.io/badge/Hugging%20Face-Dataset-orange)](https://huggingface.co/datasets/tencent/CL-bench)
+[![⭐ OpenReward Environment](https://img.shields.io/badge/%E2%AD%90%20OpenReward-Environment-f7e6cc)](https://openreward.ai/GeneralReasoning/CL-Bench) [![Hugging Face Dataset](https://img.shields.io/badge/Hugging%20Face-Dataset-orange)](https://huggingface.co/datasets/tencent/CL-bench)
 
 ## Description
 
@@ -16,11 +15,11 @@ CL-Bench (Context Learning Benchmark) is an environment for evaluating the abili
 
 ## Compute Requirements
 
-No sandbox is needed. CL-Bench uses standard defaults.
+This is a single-turn environment with no sandbox.
 
 ## License
 
-[ORLv1](https://openreward.ai/orlv1.md).
+[CL-Bench License](https://huggingface.co/datasets/tencent/CL-bench/blob/main/LICENSE.txt) (research/benchmarking only, no training).
 
 ## Tasks
 
@@ -35,7 +34,7 @@ The four task categories are:
 
 ## Reward Structure
 
-CL-Bench uses binary reward scoring (1.0 or 0.0). All rubrics for a given task must pass for the agent to receive a reward of 1.0. If any single rubric fails, the reward is 0.0. Each rubric is graded independently by gpt-5-mini using structured JSON output, and detailed per-rubric pass/fail feedback with reasoning is returned to the caller.
+CL-Bench uses binary reward scoring (1.0 or 0.0). Each task has 3 to 114 verification rubrics (averaging ~16.6 rubrics per task) crafted by domain experts. Rubrics specify precise criteria the answer must satisfy, such as "mentions X concept", "correctly applies rule Y", or "includes numerical result Z". All rubrics for a task must pass for the agent to receive a reward of 1.0. If any single rubric fails, the reward is 0.0. Each rubric is graded independently by gpt-5-mini, and detailed per-rubric pass/fail feedback is returned.
 
 ## Data
 
@@ -53,7 +52,14 @@ CL-Bench is a single-turn environment. The agent reads the context and question,
 
 ## Environment Difficulty
 
-CL-Bench is a high-difficulty benchmark. Frontier models achieve a 17-24% success rate, reflecting the strict ALL-rubrics-must-pass evaluation criterion and the complexity of the context learning tasks.
+The original paper evaluates ten frontier language models on CL-Bench:
+
+| Model | Success Rate |
+|-------|--------------|
+| GPT-5.1 | 23.7% |
+| Average (10 models) | 17.2% |
+
+The strict all-rubrics-must-pass criterion and complexity of context learning tasks make this a challenging benchmark.
 
 ## Other Environment Requirements
 

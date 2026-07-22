@@ -42,13 +42,11 @@ Task data is stored in `clbench_tasks.parquet`, sourced from the HuggingFace dat
 
 ## Tools
 
-| Tool | Parameters | Description |
-|------|-----------|-------------|
-| `submit_answer` | `answer: str` | Submit your final answer for evaluation against all rubrics. Ends the episode. |
+CL-Bench exposes no tools to the agent. The rollout ends as soon as the model emits a plain assistant message; that message is graded against all rubrics.
 
 ## Time Horizon
 
-CL-Bench is a single-turn environment. The agent reads the context and question, then submits one answer via the `submit_answer` tool.
+CL-Bench is a single-turn environment. The agent reads the context and question, then replies with its answer as an ordinary message.
 
 ## Environment Difficulty
 

@@ -27,6 +27,7 @@ from openreward.environments import (
     Server,
     TextBlock,
     ToolOutput,
+    terminal,
     tool,
 )
 
@@ -168,13 +169,15 @@ class CLBench(Environment):
         prompt_parts.append(
             "\nINSTRUCTIONS:\n"
             "Read the context carefully and answer the question based on the "
-            "information provided. Use the submit_answer tool when ready to submit your final answer."
+            "information provided. Reply with your final answer as an ordinary "
+            "message (no tool call)."
         )
 
         full_prompt = "\n\n".join(prompt_parts)
 
         return [TextBlock(type="text", text=full_prompt)]
 
+    @terminal
     @tool
     async def submit_answer(self, params: SubmitAnswerInput) -> ToolOutput:
         """

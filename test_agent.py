@@ -1,14 +1,12 @@
-"""
-Test agent for CLBench environment using OpenAI Responses API.
+"""Agent loop for CL-Bench.
 
-Usage:
-    export OPENAI_API_KEY="sk-..."
-    python test_agent.py
+CL-Bench uses a @terminal tool: the grading tool is hidden from the model,
+which reads the context/question and writes its answer as an ordinary
+message. The harness sees a message with no tool calls and routes its text
+to session.call_terminal_tool(), which grades against all rubrics.
 
-Optional:
-    export MODEL_NAME="gpt-5.2"  # Default: gpt-5
-    export BASE_URL="http://localhost:8080"  # For local testing
-    export TASK_INDEX="0"  # Which task to test (default: 0)
+Runs against the deployed environment by default; set LOCAL=1 to point at a
+local `python server.py` on port 8080.
 """
 
 import asyncio
@@ -19,119 +17,96 @@ from openai import AsyncOpenAI
 from openreward import AsyncOpenReward
 
 
-MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-5.2")
-OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
-BASE_URL = os.environ.get("BASE_URL", "http://localhost:8080")
-TASK_INDEX = int(os.environ.get("TASK_INDEX", "0"))
+def _text_of(response) -> str:
+    parts = []
+    for item in response.output:
+        if item.type == "message":
+            for block in item.content:
+                if block.type == "output_text":
+                    parts.append(block.text)
+    return "\n".join(parts).strip()
 
 
-async def main() -> None:
-    """Run agent on CLBench task."""
-
+async def main():
     or_client = AsyncOpenReward()
-    oai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+    oai_client = AsyncOpenAI()
 
-    # Connect to environment
-    environment = or_client.environments.get(name="local/CLBench", base_url=BASE_URL)
+    MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-5.2")
+    ENV_NAME = "GeneralReasoning/CL-Bench"
+    SPLIT = os.environ.get("SPLIT", "test")
+    NUM_TASKS = int(os.environ.get("NUM_TASKS", "1"))
+    MAX_TURNS = int(os.environ.get("MAX_TURNS", "40"))
+    OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 
-    # Get tasks and tools
-    tasks = await environment.list_tasks(split="test")
+    base_url = "http://localhost:8080" if os.environ.get("LOCAL") else None
+    environment = or_client.environments.get(name=ENV_NAME, base_url=base_url)
+    print(f"Environment: {ENV_NAME} ({base_url or 'deployed'})")
+
+    tasks = await environment.list_tasks(split=SPLIT)
     tools = await environment.list_tools(format="openai")
+    terminal_tool = await environment.terminal_tool()
 
     print(f"Found {len(tasks)} tasks")
-    print(f"Testing task index: {TASK_INDEX}")
-    print()
+    print(f"Tools visible to the model: {[t['name'] for t in tools]}")
+    print(f"Terminal tool (hidden): {terminal_tool}")
 
-    # Run session
-    async with environment.session(
-        task=tasks[TASK_INDEX], secrets={"openai_api_key": OPENAI_API_KEY}
-    ) as session:
-        # Get prompt
-        prompt = await session.get_prompt()
-        prompt_text = prompt[0].text if isinstance(prompt, list) else prompt
+    for task in tasks[:NUM_TASKS]:
+        print(f"\n=== Task {task.task_spec['task_id']} ===")
 
-        print("=" * 60)
-        print("PROMPT (first 1000 chars)")
-        print("=" * 60)
-        print(prompt_text[:1000] + ("..." if len(prompt_text) > 1000 else ""))
-        print()
+        async with environment.session(
+            task=task,
+            secrets={"openai_api_key": OPENAI_API_KEY},
+        ) as session:
+            assistant_ends_rollout = await session.is_assistant_message_final()
+            session_tools = await session.list_tools()
+            print(f"is_assistant_message_final() -> {assistant_ends_rollout}")
+            print(f"session.list_tools() -> {[t.name for t in session_tools]}")
+            assert "submit_answer" not in [t.name for t in session_tools], \
+                "terminal tool leaked into the model's tool list"
 
-        # Initialize conversation
-        input_list = [{"role": "user", "content": prompt_text}]
-        finished = False
-        turn = 0
+            prompt = await session.get_prompt()
+            input_list = [{"role": "user", "content": prompt[0].text}]
 
-        while not finished and turn < 10:  # Max 10 turns safety limit
-            turn += 1
-            print(f"--- Turn {turn} ---")
+            reward = None
+            turn = 0
 
-            # Get model response
-            response = await oai_client.responses.create(
-                model=MODEL_NAME, tools=tools, input=input_list
-            )
+            while turn < MAX_TURNS:
+                turn += 1
+                print(f"\n--- Turn {turn} ---")
 
-            print(f"Model: {MODEL_NAME}")
-            for item in response.output:
-                if item.type == "text":
-                    print(f"Text: {item.text[:200]}{'...' if len(item.text) > 200 else ''}")
-                elif item.type == "function_call":
-                    print(f"Tool Call: {item.name}")
-                    args = json.loads(str(item.arguments))
-                    answer_preview = args.get("answer", "")[:100]
-                    print(f"Answer (preview): {answer_preview}{'...' if len(answer_preview) == 100 else ''}")
-            print()
+                kwargs = {"model": MODEL_NAME, "input": input_list}
+                if tools:
+                    kwargs["tools"] = tools
+                response = await oai_client.responses.create(**kwargs)
+                input_list += response.output
 
-            # Add model output to conversation
-            input_list += response.output
-
-            # Process tool calls
-            for item in response.output:
-                if item.type == "function_call":
-                    # Execute tool
-                    tool_result = await session.call_tool(
-                        item.name, json.loads(str(item.arguments))
-                    )
-
-                    finished = tool_result.finished
-
-                    # Add tool result to conversation
-                    input_list.append(
-                        {
+                calls = [i for i in response.output if i.type == "function_call"]
+                if calls:
+                    for item in calls:
+                        args = json.loads(str(item.arguments))
+                        tool_result = await session.call_tool(item.name, args)
+                        input_list.append({
                             "type": "function_call_output",
                             "call_id": item.call_id,
-                            "output": json.dumps(
-                                {
-                                    "result": (
-                                        tool_result.blocks[0].text
-                                        if tool_result.blocks
-                                        else ""
-                                    )
-                                }
-                            ),
-                        }
-                    )
+                            "output": tool_result.blocks[0].text,
+                        })
+                        print(f"Tool: {item.name}({json.dumps(args)[:120]})")
+                    continue
 
-                    print("=" * 60)
-                    print("TOOL RESULT")
-                    print("=" * 60)
-                    if tool_result.blocks:
-                        print(tool_result.blocks[0].text)
-                    print()
-                    print(f"Reward: {tool_result.reward}")
-                    print(f"Finished: {tool_result.finished}")
-                    print()
+                final_message = _text_of(response)
+                print(f"Final message: {final_message[:300]}")
 
-                    if finished:
-                        break
+                if not assistant_ends_rollout:
+                    print("Environment is not terminal-tool style; stopping.")
+                    break
 
-            # Safety: break if no tool calls and no continuation
-            if not any(item.type == "function_call" for item in response.output):
-                print("No tool calls made, ending session")
+                out = await session.call_terminal_tool(final_message)
+                reward = out.reward
+                print(f"\ncall_terminal_tool -> reward={reward} finished={out.finished}")
+                print(out.blocks[0].text[:800])
                 break
 
-    print("=" * 60)
-    print("Session completed!")
-    print("=" * 60)
+            print(f"\n=== Task {task.task_spec['task_id']} reward={reward} turns={turn} ===")
 
 
 if __name__ == "__main__":
